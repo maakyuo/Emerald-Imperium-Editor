@@ -5,22 +5,7 @@ function inspect(){if(!data)return;let p=parseInt($('offset').value,16);$('byte'
 function change(){if(!valid)return alert('검증된 세이브만 수정 가능');let p=parseInt($('offset').value,16),s=$('value').value;if(!/^[0-9a-f]{1,2}$/i.test(s)||!Number.isInteger(p)||p<0||p>=28*4096||p%4096>=0xff4)return alert('잘못된 주소/값');data[p]=parseInt(s,16);let b=Math.floor(p/4096)*4096;put16(data,b+0xff6,sum(data,b));inspect();}
 function save(){if(!valid)return alert('검증 실패');let str='';for(let i=0;i<data.length;i+=8192)str+=String.fromCharCode(...data.subarray(i,i+8192));AndroidSave.exportSave(btoa(str));}
 
-function partyDiagnostics(){
- if(!data)return;
- const sec=[...Array(28)].map((_,i)=>i*4096).find(p=>u16(data,p+0xff4)===1);
- if(sec===undefined)return;
- const count=u32(data,sec+0x234);
- let lines=['파티 수 후보: '+count,'표준 에메랄드 구조 호환성 검사'];
- for(let j=0;j<Math.min(count,6);j++){
-   const p=sec+0x238+j*100,pid=u32(data,p),ot=u32(data,p+4),key=pid^ot;
-   let words=[],check=0;
-   for(let k=0;k<12;k++){let v=u32(data,p+32+k*4)^key;words.push(v);check=(check+(v&65535)+(v>>>16))&65535;}
-   const stored=u16(data,p+28);
-   lines.push('파티 '+(j+1)+': '+(stored===check?'표준 체크섬 일치':'표준 체크섬 불일치')+' (저장 '+stored+', 계산 '+check+')');
- }
- lines.push('불일치하면 포켓몬 종류·기술·특성 편집을 잠금 처리합니다.');
- $('party').textContent=lines.join('\n');
-}
+function partyDiagnostics(){if(!data)return;const sec=[...Array(28)].map((_,i)=>i*4096).find(p=>u16(data,p+0xff4)===1);if(sec===undefined){$('party').textContent='섹터 ID 1을 찾지 못했습니다.';return;}const guess=u32(data,sec+0x234);$('party').textContent='임페리움 전용 포켓몬 구조는 아직 확인되지 않았습니다.\n기존 표준 에메랄드 파티 위치 가정은 사용하지 않습니다.\n섹터 ID 1 / 기존 추정 위치 값: '+guess+' (파티 수로 확정되지 않음)\n포켓몬 편집은 데이터 구조 확인 전까지 비활성화됩니다.';}
 const previousLoad=$('file').onchange;
 $('file').onchange=async e=>{await previousLoad(e);partyDiagnostics();};
 </script></html>
