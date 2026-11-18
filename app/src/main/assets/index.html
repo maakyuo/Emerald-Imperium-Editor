@@ -1,7 +1,26 @@
-<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#101827;color:white;font:16px system-ui;padding:15px}section{background:#25334a;padding:14px;border-radius:12px;margin:12px 0}button,input{padding:10px;margin:5px;max-width:90%}button{background:#8fc5ff;border:0;border-radius:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><h2>에메랄드 임페리움 세이브 에디터</h2><p>실험용 섹터·바이트 편집 도구 (포켓몬 개별 편집 미지원)</p><section><input type="file" id="file" accept=".sav"><p id="status">세이브를 선택해줘.</p></section><section><h3>섹터 검사</h3><pre id="sectors"></pre></section><section><h3>바이트 편집 (16진수)</h3><input id="offset" placeholder="파일 오프셋" value="5000"><input id="value" placeholder="값" value="00" maxlength="2"><button onclick="inspect()">읽기</button><button onclick="change()">수정</button><p id="byte"></p></section><section><button onclick="save()">수정본 SAV 내보내기</button></section><script>
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#101827;color:white;font:16px system-ui;padding:15px}section{background:#25334a;padding:14px;border-radius:12px;margin:12px 0}button,input{padding:10px;margin:5px;max-width:90%}button{background:#8fc5ff;border:0;border-radius:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><h2>에메랄드 임페리움 세이브 에디터</h2><p>실험용 섹터·바이트 편집 도구 (포켓몬 개별 편집 미지원)</p><section><input type="file" id="file" accept=".sav"><p id="status">세이브를 선택해줘.</p></section><section><h3>섹터 검사</h3><pre id="sectors"></pre></section><section><h3>파티 구조 진단 (읽기 전용)</h3><pre id="party">세이브를 불러오면 표시됩니다.</pre></section><section><h3>바이트 편집 (16진수)</h3><input id="offset" placeholder="파일 오프셋" value="5000"><input id="value" placeholder="값" value="00" maxlength="2"><button onclick="inspect()">읽기</button><button onclick="change()">수정</button><p id="byte"></p></section><section><button onclick="save()">수정본 SAV 내보내기</button></section><script>
 let data=null,valid=false;const $=x=>document.getElementById(x),u16=(a,p)=>a[p]|a[p+1]<<8,u32=(a,p)=>(a[p]|a[p+1]<<8|a[p+2]<<16|a[p+3]<<24)>>>0;function put16(a,p,v){a[p]=v&255;a[p+1]=v>>8&255}function sum(a,b){let s=0;for(let p=b;p<b+0xff4;p+=4)s=(s+u32(a,p))>>>0;return((s&65535)+(s>>>16))&65535}
 $('file').onchange=async e=>{let f=e.target.files[0];if(!f)return;data=new Uint8Array(await f.arrayBuffer());valid=data.length===131072;let ids=new Set(),lines=[];if(valid)for(let i=0;i<28;i++){let b=i*4096,id=u16(data,b+0xff4),sig=u32(data,b+0xff8),ok=u16(data,b+0xff6)===sum(data,b);ids.add(id);if(sig!==0x08012025||!ok)valid=false;lines.push('섹터 '+i+' / ID '+id+' / '+(ok?'정상':'체크섬 오류'));}if(ids.size!==28||[...ids].some(x=>x>27))valid=false;$('sectors').textContent=lines.join('\n');$('status').textContent=valid?'검증 성공. 수정 가능':'검증 실패. 수정 차단';};
 function inspect(){if(!data)return;let p=parseInt($('offset').value,16);$('byte').textContent=p>=0&&p<data.length?'0x'+p.toString(16)+': '+data[p].toString(16).padStart(2,'0'):'잘못된 주소'}
 function change(){if(!valid)return alert('검증된 세이브만 수정 가능');let p=parseInt($('offset').value,16),s=$('value').value;if(!/^[0-9a-f]{1,2}$/i.test(s)||!Number.isInteger(p)||p<0||p>=28*4096||p%4096>=0xff4)return alert('잘못된 주소/값');data[p]=parseInt(s,16);let b=Math.floor(p/4096)*4096;put16(data,b+0xff6,sum(data,b));inspect();}
 function save(){if(!valid)return alert('검증 실패');let str='';for(let i=0;i<data.length;i+=8192)str+=String.fromCharCode(...data.subarray(i,i+8192));AndroidSave.exportSave(btoa(str));}
+
+function partyDiagnostics(){
+ if(!data)return;
+ const sec=[...Array(28)].map((_,i)=>i*4096).find(p=>u16(data,p+0xff4)===1);
+ if(sec===undefined)return;
+ const count=u32(data,sec+0x234);
+ let lines=['파티 수 후보: '+count,'표준 에메랄드 구조 호환성 검사'];
+ for(let j=0;j<Math.min(count,6);j++){
+   const p=sec+0x238+j*100,pid=u32(data,p),ot=u32(data,p+4),key=pid^ot;
+   let words=[],check=0;
+   for(let k=0;k<12;k++){let v=u32(data,p+32+k*4)^key;words.push(v);check=(check+(v&65535)+(v>>>16))&65535;}
+   const stored=u16(data,p+28);
+   lines.push('파티 '+(j+1)+': '+(stored===check?'표준 체크섬 일치':'표준 체크섬 불일치')+' (저장 '+stored+', 계산 '+check+')');
+ }
+ lines.push('불일치하면 포켓몬 종류·기술·특성 편집을 잠금 처리합니다.');
+ $('party').textContent=lines.join('\n');
+}
+const previousLoad=$('file').onchange;
+$('file').onchange=async e=>{await previousLoad(e);partyDiagnostics();};
 </script></html>
